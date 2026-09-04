@@ -1,0 +1,35 @@
+name: Publish verified APK
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-apk.yml']
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download tested APK
+        uses: actions/download-artifact@v4
+        with:
+          name: kisskh-tv-apk
+          run-id: 33830341457
+          github-token: ${{ github.token }}
+          repository: kwkhong/kisskh-tv
+          path: dist
+      - name: Verify exact tested binary
+        run: |
+          echo 'd19fb163eb83090313451fec98c383aed4a416f4d301b476c499074df95b3331  dist/kisskh-tv.apk' | sha256sum --check
+      - name: Publish public APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: kwkhong/kisskh-tv
+        run: |
+          if gh release view v1.0.0 >/dev/null 2>&1; then
+            echo 'Release already exists; preserving its assets.'
+          else
+            gh release create v1.0.0 dist/kisskh-tv.apk dist/kisskh-tv.apk.sha256 --target dcff890d30a0f4959808ba51f9b72220e2b69050 --title 'KissKH TV 1.0.0' --notes 'Download kisskh-tv.apk below and install on Chromecast with Google TV or Android TV. This is the debug-signed APK that passed unit tests, lint and six Android TV emulator tests. Use D-pad and OK to browse; hold OK for pointer mode. Live website/provider compatibility depends on your device and network.'
+          fi
