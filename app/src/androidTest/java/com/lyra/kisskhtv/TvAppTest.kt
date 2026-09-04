@@ -91,7 +91,6 @@ class TvAppTest {
             scenario.onActivity {
                 val web = it.findViewById<WebView>(R.id.webView)
                 val message = android.os.Message.obtain(android.os.Handler(android.os.Looper.getMainLooper()))
-                message.obj = WebView.WebViewTransport()
                 assertFalse(web.webChromeClient!!.onCreateWindow(web, false, false, message))
             }
         }
@@ -108,7 +107,6 @@ class TvAppTest {
                 val panel = root.getChildAt(root.childCount - 2) as android.widget.FrameLayout
                 val child = panel.getChildAt(0) as WebView
                 val nested = android.os.Message.obtain(android.os.Handler(android.os.Looper.getMainLooper()))
-                nested.obj = WebView.WebViewTransport()
                 assertFalse(child.webChromeClient!!.onCreateWindow(child, false, true, nested))
                 val request = object : WebResourceRequest {
                     override fun getUrl() = Uri.parse("https://accounts.google.com/o/oauth2/auth")
@@ -121,6 +119,10 @@ class TvAppTest {
                 assertTrue(child.webViewClient.shouldOverrideUrlLoading(child, request))
             }
             waitFor("Blocked popup must close") { js(scenario, "child.closed") == "true" }
+            waitFor("Native browser explanation must be visible") {
+                instrumentation.uiAutomation.rootInActiveWindow
+                    ?.findAccessibilityNodeInfosByText("Google sign-in needs a browser")?.isNotEmpty() == true
+            }
             // Dismiss the explanatory native dialog; the page must still be usable.
             key(KeyEvent.KEYCODE_BACK)
             js(scenario, "alert('Firebase: (auth/popup-closed-by-user).');window.alertHandled=true")
