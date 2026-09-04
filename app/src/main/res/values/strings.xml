@@ -7,4 +7,12 @@
     <string name="pointer_on">Pointer on: D-pad moves, OK clicks. Hold OK to switch back.</string>
     <string name="pointer_off">D-pad focus mode</string>
     <string name="downloads_disabled">Downloads are not supported in KissKH TV.</string>
+    <string name="popup_help">New window. Use D-pad and OK; hold OK for pointer. Back closes this window.</string>
+    <string name="popup_load_error">Unable to load this window. Press Back to return to KissKH.</string>
+    <string name="google_sign_in_title">Google sign-in needs a browser</string>
+    <string name="google_sign_in_message">Google does not allow sign-in inside this app. You can open KissKH in a supported browser and sign in there. That login stays in the browser and will not sign you into this TV app.</string>
+    <string name="open_browser">Open KissKH in browser</string>
+    <string name="keep_watching">Return to KissKH</string>
+    <string name="browser_missing">No browser is installed. You can keep watching here without Google sign-in.</string>
+    <string name="popup_blank">New window — Back to close</string>
 </resources>
