@@ -101,7 +101,13 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onPageFinished(view: WebView, url: String?) {
                 progress.visibility = View.GONE
-                if (!pageFailed) view.evaluateJavascript(navigationScript, null)
+                // A cancelled previous load can report an error while the replacement
+                // document is loading. Navigation installation belongs to the document,
+                // not to the previous request's error state.
+                view.evaluateJavascript(navigationScript, null)
+            }
+            override fun onPageCommitVisible(view: WebView, url: String?) {
+                view.evaluateJavascript(navigationScript, null)
             }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 // Normal HTTPS browsing only. Never launch arbitrary intents or file/content URLs.

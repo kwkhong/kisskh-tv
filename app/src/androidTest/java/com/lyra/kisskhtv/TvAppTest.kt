@@ -40,14 +40,28 @@ class TvAppTest {
         fail(message)
     }
     private fun fixture(scenario: ActivityScenario<MainActivity>, html: String) {
+        // Finish replacement of the live launch request before loading a deterministic
+        // document. This avoids attributing a late network error to the fixture.
         scenario.onActivity {
             val web = it.findViewById<WebView>(R.id.webView)
             web.stopLoading()
+            web.loadUrl("about:blank")
+        }
+        waitFor("Blank replacement document") {
+            js(scenario, "location.href === 'about:blank' && document.readyState === 'complete'") == "true"
+        }
+        scenario.onActivity {
+            val web = it.findViewById<WebView>(R.id.webView)
             web.loadDataWithBaseURL("https://example.test/", "<meta name='viewport' content='width=device-width,initial-scale=1'>" + html,
                 "text/html", "UTF-8", null)
         }
-        waitFor("Fixture and navigation script failed to load") {
-            js(scenario, "document.readyState === 'complete' && !!window.__kissKhTvMove") == "true"
+        try {
+            waitFor("Fixture and navigation script failed to load") {
+                js(scenario, "document.readyState === 'complete' && !!window.__kissKhTvMove") == "true"
+            }
+        } catch (failure: AssertionError) {
+            fail("Fixture state: " + js(scenario,
+                "JSON.stringify({url:location.href,ready:document.readyState,head:!!document.head,body:!!document.body,installed:!!window.__kissKhTvInstalled,move:typeof window.__kissKhTvMove})"))
         }
     }
     private fun key(code: Int) = instrumentation.sendKeyDownUpSync(code)
