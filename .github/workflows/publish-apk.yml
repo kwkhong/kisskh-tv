@@ -16,20 +16,20 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: kisskh-tv-apk
-          run-id: 33830341457
+          run-id: 33887023655
           github-token: ${{ github.token }}
           repository: kwkhong/kisskh-tv
           path: dist
       - name: Verify exact tested binary
         run: |
-          echo 'd19fb163eb83090313451fec98c383aed4a416f4d301b476c499074df95b3331  dist/kisskh-tv.apk' | sha256sum --check
+          echo 'd9b826d19c4c7786149f8d1eb46912768eefc12b5d39f47392a51751c9fc0ae6  dist/kisskh-tv.apk' | sha256sum --check
       - name: Publish public APK download
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: kwkhong/kisskh-tv
         run: |
-          if gh release view v1.0.0 >/dev/null 2>&1; then
+          if gh release view v1.0.1 >/dev/null 2>&1; then
             echo 'Release already exists; preserving its assets.'
           else
-            gh release create v1.0.0 dist/kisskh-tv.apk dist/kisskh-tv.apk.sha256 --target dcff890d30a0f4959808ba51f9b72220e2b69050 --title 'KissKH TV 1.0.0' --notes 'Download kisskh-tv.apk below and install on Chromecast with Google TV or Android TV. This is the debug-signed APK that passed unit tests, lint and six Android TV emulator tests. Use D-pad and OK to browse; hold OK for pointer mode. Live website/provider compatibility depends on your device and network.'
+            gh release create v1.0.1 dist/kisskh-tv.apk dist/kisskh-tv.apk.sha256 --target d165c9826af6718d86b22f7ff39193c2d845453d --title 'KissKH TV 1.0.1' --notes 'Fixes user-opened popup lifecycle, remote navigation in popup windows, and explains unsupported Google sign-in. IMPORTANT: Google sign-in inside the APK remains unsupported. The optional external-browser action keeps login in that browser only. Passed unit tests, lint and all nine Android TV emulator tests. Download kisskh-tv.apk below. This is debug-signed; if Android rejects the update, uninstall the earlier app first (clears app data).'
           fi
