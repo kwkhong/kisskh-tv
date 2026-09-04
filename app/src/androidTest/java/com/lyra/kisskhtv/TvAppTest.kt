@@ -66,6 +66,72 @@ class TvAppTest {
     }
     private fun key(code: Int) = instrumentation.sendKeyDownUpSync(code)
 
+    @Test fun popupKeepsOpenerAndRemoteOkWorksThenBackCloses() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            fixture(scenario, """<script>function openPopup() {
+                window.child=window.open('about:blank');
+                child.document.write(`<button onclick="opener.popupClicks=(opener.popupClicks||0)+1">Popup action</button>`);
+                child.document.close();
+            }</script><button id='open' onclick='openPopup()'>Open popup</button>""")
+            js(scenario, "document.getElementById('open').focus()")
+            key(KeyEvent.KEYCODE_DPAD_CENTER)
+            waitFor("Popup must preserve its opener") { js(scenario, "!!window.child && !child.closed && child.opener === window") == "true" }
+            key(KeyEvent.KEYCODE_DPAD_DOWN)
+            waitFor("Popup navigation must also initialize in dynamically written windows") {
+                js(scenario, "!!child.__kissKhTvMove && child.document.activeElement.tagName === 'BUTTON'") == "true"
+            }
+            key(KeyEvent.KEYCODE_DPAD_CENTER)
+            waitFor("Remote OK must activate popup control") { js(scenario, "window.popupClicks") == "1" }
+            key(KeyEvent.KEYCODE_BACK)
+            waitFor("Back must close popup without leaving opener") { js(scenario, "child.closed && !!document.getElementById('open')") == "true" }
+        }
+    }
+
+    @Test fun popupPolicyRejectsAutomaticAndNestedWindows() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            fixture(scenario, "<button>Ready</button>")
+            scenario.onActivity {
+                val web = it.findViewById<WebView>(R.id.webView)
+                val message = android.os.Message.obtain(android.os.Handler(android.os.Looper.getMainLooper()))
+                assertFalse(web.webChromeClient!!.onCreateWindow(web, false, false, message))
+            }
+        }
+    }
+
+    @Test fun googlePopupShowsBrowserExplanationAndClosesWithoutLoadingGoogle() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            fixture(scenario, """<button id='open' onclick="window.child=window.open('about:blank')">Open</button>""")
+            js(scenario, "document.getElementById('open').focus()")
+            key(KeyEvent.KEYCODE_DPAD_CENTER)
+            waitFor("Popup open") { js(scenario, "!!window.child && !child.closed") == "true" }
+            scenario.onActivity {
+                val root = it.findViewById<android.widget.FrameLayout>(R.id.root)
+                val panel = root.getChildAt(root.childCount - 2) as android.widget.FrameLayout
+                val child = panel.getChildAt(0) as WebView
+                val nested = android.os.Message.obtain(android.os.Handler(android.os.Looper.getMainLooper()))
+                assertFalse(child.webChromeClient!!.onCreateWindow(child, false, true, nested))
+                val request = object : WebResourceRequest {
+                    override fun getUrl() = Uri.parse("https://accounts.google.com/o/oauth2/auth")
+                    override fun isForMainFrame() = true
+                    override fun isRedirect() = true
+                    override fun hasGesture() = false
+                    override fun getMethod() = "GET"
+                    override fun getRequestHeaders() = emptyMap<String, String>()
+                }
+                assertTrue(child.webViewClient.shouldOverrideUrlLoading(child, request))
+            }
+            waitFor("Blocked popup must close") { js(scenario, "child.closed") == "true" }
+            waitFor("Native browser explanation must be visible") {
+                instrumentation.uiAutomation.rootInActiveWindow
+                    ?.findAccessibilityNodeInfosByText("Google sign-in needs a browser")?.isNotEmpty() == true
+            }
+            // Dismiss the explanatory native dialog; the page must still be usable.
+            key(KeyEvent.KEYCODE_BACK)
+            js(scenario, "alert('Firebase: (auth/popup-closed-by-user).');window.alertHandled=true")
+            waitFor("Duplicate Firebase error must be acknowledged") { js(scenario, "window.alertHandled") == "true" }
+        }
+    }
+
     @Test fun tvLauncherAndSecureWebView() {
         val context = instrumentation.targetContext
         val tvIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER).setPackage(context.packageName)

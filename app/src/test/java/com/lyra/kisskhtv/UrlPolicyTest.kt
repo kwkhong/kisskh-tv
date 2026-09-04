@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class UrlPolicyTest {
+    @Test fun googleSignInHostMatchesOnlyGoogleAccountHosts() {
+        listOf("https://accounts.google.com/o/oauth2/auth", "https://ACCOUNTS.GOOGLE.COM./", "https://x.accounts.google.com/")
+            .forEach { assertTrue(it, UrlPolicy.isGoogleSignIn(it)) }
+        listOf("https://accounts.google.com.evil.test/", "https://evil.test/?next=accounts.google.com", "https://kisskh.co/", "invalid")
+            .forEach { assertFalse(it, UrlPolicy.isGoogleSignIn(it)) }
+    }
+
     @Test fun normalHttpsNavigation() {
         assertTrue(UrlPolicy.isHttps("https://kisskh.co/"))
         assertTrue(UrlPolicy.isHttps("https://player.example/video?id=123"))

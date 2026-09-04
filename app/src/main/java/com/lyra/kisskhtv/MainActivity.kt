@@ -1,6 +1,10 @@
 package com.lyra.kisskhtv
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.os.Message
 import android.graphics.Bitmap
 import android.net.http.SslError
 import android.os.Bundle
@@ -15,8 +19,10 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.Toast
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import org.json.JSONObject
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -37,6 +43,12 @@ class MainActivity : AppCompatActivity() {
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
     private var pageFailed = false
     private var retryUrl = HOME_URL
+    private var popup: WebView? = null
+    private var popupContainer: FrameLayout? = null
+    private var popupAddress: TextView? = null
+    private var browserNotice: AlertDialog? = null
+    private var googlePopupBlocked = false
+    private val activeWebView: WebView get() = popup ?: webView
     private var centerDown = false
     private var longPressHandled = false
 
@@ -59,6 +71,7 @@ class MainActivity : AppCompatActivity() {
                 when {
                     fullscreenView != null -> exitFullscreen()
                     pointer.pointerActive -> pointer.pointerActive = false
+                    popup != null -> closePopup()
                     webView.canGoBack() -> webView.goBack()
                     else -> finish()
                 }
@@ -74,7 +87,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun configureWebView() {
+    private fun configureWebView(target: WebView = webView) {
+        val webView = target
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
         webView.settings.apply {
@@ -94,13 +108,22 @@ class MainActivity : AppCompatActivity() {
         webView.setBackgroundColor(android.graphics.Color.BLACK)
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                if (UrlPolicy.isGoogleSignIn(url.orEmpty())) {
+                    view.stopLoading()
+                    showBrowserSignInNotice()
+                    return
+                }
+                if (view !== this@MainActivity.webView) {
+                    popupAddress?.text = Uri.parse(url.orEmpty()).host ?: getString(R.string.popup_blank)
+                    return
+                }
                 pageFailed = false
                 if (url != null && UrlPolicy.isHttps(url)) retryUrl = url
                 errorPanel.visibility = View.GONE
                 progress.visibility = View.VISIBLE
             }
             override fun onPageFinished(view: WebView, url: String?) {
-                progress.visibility = View.GONE
+                if (view === this@MainActivity.webView) progress.visibility = View.GONE
                 // A cancelled previous load can report an error while the replacement
                 // document is loading. Navigation installation belongs to the document,
                 // not to the previous request's error state.
@@ -110,26 +133,39 @@ class MainActivity : AppCompatActivity() {
                 view.evaluateJavascript(navigationScript, null)
             }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                if (UrlPolicy.isGoogleSignIn(request.url.toString())) {
+                    showBrowserSignInNotice()
+                    return true
+                }
+                // Only the blank document used to establish a popup opener is allowed.
+                if (view === popup && request.url.toString() == "about:blank") return false
                 // Normal HTTPS browsing only. Never launch arbitrary intents or file/content URLs.
                 return !UrlPolicy.isHttps(request.url.toString())
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                if (request.isForMainFrame) showError()
+                if (request.isForMainFrame) {
+                    if (view === this@MainActivity.webView) showError()
+                    else Toast.makeText(this@MainActivity, R.string.popup_load_error, Toast.LENGTH_LONG).show()
+                }
             }
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
-                if (request.isForMainFrame) showError()
+                if (request.isForMainFrame) {
+                    if (view === this@MainActivity.webView) showError()
+                    else Toast.makeText(this@MainActivity, R.string.popup_load_error, Toast.LENGTH_LONG).show()
+                }
             }
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
                 handler.cancel()
-                if (error.url == view.url || error.url == retryUrl) showError()
+                if (view === this@MainActivity.webView && (error.url == view.url || error.url == retryUrl)) showError()
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                if (view !== this@MainActivity.webView) return
                 progress.visibility = if (!pageFailed && newProgress < 100) View.VISIBLE else View.GONE
             }
             override fun onShowCustomView(view: View, callback: CustomViewCallback) {
-                if (fullscreenView != null) { callback.onCustomViewHidden(); return }
+                if (webView === popup || fullscreenView != null) { callback.onCustomViewHidden(); return }
                 fullscreenView = view
                 fullscreenCallback = callback
                 webView.visibility = View.GONE
@@ -139,11 +175,91 @@ class MainActivity : AppCompatActivity() {
                 immersive()
             }
             override fun onHideCustomView() = exitFullscreen()
-            // Do not grant camera, microphone, protected-media identifiers, or popup windows.
+            override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
+                // Keep the opener document alive for Firebase postMessage/window.closed.
+                // Only one user-requested window; no automatic or nested popups.
+                if (!isUserGesture || popup != null || view !== this@MainActivity.webView || fullscreenView != null) return false
+                val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                googlePopupBlocked = false
+                val child = WebView(this@MainActivity)
+                popup = child
+                configureWebView(child)
+                val panel = FrameLayout(this@MainActivity)
+                val headerHeight = (40 * resources.displayMetrics.density).toInt()
+                val address = TextView(this@MainActivity).apply {
+                    text = getString(R.string.popup_blank)
+                    setTextColor(android.graphics.Color.WHITE)
+                    setBackgroundColor(android.graphics.Color.DKGRAY)
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setPadding(16, 0, 16, 0)
+                }
+                popupContainer = panel
+                popupAddress = address
+                panel.addView(child, FrameLayout.LayoutParams(-1, -1).apply { topMargin = headerHeight })
+                panel.addView(address, FrameLayout.LayoutParams(-1, headerHeight))
+                findViewById<FrameLayout>(R.id.root).addView(panel, FrameLayout.LayoutParams(-1, -1))
+                pointer.bringToFront()
+                pointer.pointerActive = false
+                child.requestFocus()
+                transport.webView = child
+                resultMsg.sendToTarget()
+                Toast.makeText(this@MainActivity, R.string.popup_help, Toast.LENGTH_LONG).show()
+                return true
+            }
+            override fun onCloseWindow(window: WebView) {
+                if (window === popup) closePopup()
+            }
+            override fun onJsAlert(view: WebView, url: String, message: String, result: JsResult): Boolean {
+                if (googlePopupBlocked && message.contains("auth/popup-closed-by-user")) {
+                    // The native explanation already describes why this login was stopped.
+                    googlePopupBlocked = false
+                    result.confirm()
+                    return true
+                }
+                return super.onJsAlert(view, url, message, result)
+            }
+            // Do not grant camera, microphone or protected-media identifiers.
             override fun onPermissionRequest(request: PermissionRequest) = request.deny()
         }
         webView.setDownloadListener { _, _, _, _, _ ->
             Toast.makeText(this, R.string.downloads_disabled, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun closePopup() {
+        val child = popup ?: return
+        popup = null
+        pointer.pointerActive = false
+        popupContainer?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        popupContainer = null
+        popupAddress = null
+        (child.parent as? ViewGroup)?.removeView(child)
+        child.stopLoading()
+        child.destroy()
+        webView.requestFocus()
+    }
+
+    private fun showBrowserSignInNotice() {
+        googlePopupBlocked = true
+        // Post removal: never destroy a WebView from within its navigation callback.
+        webView.post {
+            if (isDestroyed || isFinishing) return@post
+            closePopup()
+            if (browserNotice?.isShowing == true) return@post
+            browserNotice = AlertDialog.Builder(this)
+                .setTitle(R.string.google_sign_in_title)
+                .setMessage(R.string.google_sign_in_message)
+                .setPositiveButton(R.string.open_browser) { _, _ ->
+                    try {
+                        // Open the site from the beginning in the browser's own session.
+                        // Do not transfer OAuth tokens, credentials or WebView cookies.
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(HOME_URL)).addCategory(Intent.CATEGORY_BROWSABLE))
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(this, R.string.browser_missing, Toast.LENGTH_LONG).show()
+                    }
+                }
+                .setNegativeButton(R.string.keep_watching, null)
+                .show()
         }
     }
 
@@ -175,7 +291,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (!::webView.isInitialized || errorPanel.visibility == View.VISIBLE) return super.dispatchKeyEvent(event)
+        if (!::webView.isInitialized || (popup == null && errorPanel.visibility == View.VISIBLE)) return super.dispatchKeyEvent(event)
+        val webView = activeWebView
         // Leave the on-screen keyboard's keys to Android.
         if (ViewCompat.getRootWindowInsets(webView)?.isVisible(WindowInsetsCompat.Type.ime()) == true) return super.dispatchKeyEvent(event)
         val key = event.keyCode
@@ -198,7 +315,7 @@ class MainActivity : AppCompatActivity() {
                             fullscreenView?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))
                             fullscreenView?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
                         }
-                        else -> webView.evaluateJavascript("window.__kissKhTvActivate && window.__kissKhTvActivate()") { result ->
+                        else -> webView.evaluateJavascript(navigationScript + "\nwindow.__kissKhTvActivate && window.__kissKhTvActivate()") { result ->
                             if (result != null && result != "null" && !isDestroyed) {
                                 try {
                                     val point = JSONObject(result)
@@ -224,7 +341,7 @@ class MainActivity : AppCompatActivity() {
                 if (pointer.pointerActive) {
                     val delta = (if (event.repeatCount > 5) 28 else 14) * resources.displayMetrics.density
                     pointer.move(direction, delta)
-                } else webView.evaluateJavascript("window.__kissKhTvMove && window.__kissKhTvMove('$direction')", null)
+                } else webView.evaluateJavascript(navigationScript + "\nwindow.__kissKhTvMove && window.__kissKhTvMove('$direction')", null)
             }
             return true
         }
@@ -233,8 +350,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clickPointer() {
-        val target: View = if (fullscreenView != null) fullscreenContainer else webView
-        sendTouch(target, pointer.cursorX, pointer.cursorY)
+        val target: View = if (fullscreenView != null) fullscreenContainer else activeWebView
+        val pointerOrigin = IntArray(2)
+        val targetOrigin = IntArray(2)
+        pointer.getLocationInWindow(pointerOrigin)
+        target.getLocationInWindow(targetOrigin)
+        sendTouch(target, pointer.cursorX + pointerOrigin[0] - targetOrigin[0],
+            pointer.cursorY + pointerOrigin[1] - targetOrigin[1])
     }
 
     private fun sendTouch(target: View, x: Float, y: Float) {
@@ -248,9 +370,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) { webView.saveState(outState); super.onSaveInstanceState(outState) }
-    override fun onPause() { webView.onPause(); CookieManager.getInstance().flush(); super.onPause() }
-    override fun onResume() { super.onResume(); if (::webView.isInitialized) webView.onResume() }
+    override fun onPause() { popup?.onPause(); webView.onPause(); CookieManager.getInstance().flush(); super.onPause() }
+    override fun onResume() { super.onResume(); if (::webView.isInitialized) webView.onResume(); popup?.onResume() }
     override fun onDestroy() {
+        browserNotice?.dismiss()
+        closePopup()
         exitFullscreen()
         (webView.parent as? ViewGroup)?.removeView(webView)
         webView.stopLoading()

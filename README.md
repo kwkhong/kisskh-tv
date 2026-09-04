@@ -46,12 +46,25 @@ The on-screen keyboard keeps Android's normal D-pad handling.
 - HTML5 fullscreen via Android WebChromeClient; immersive system bars and correct Back handling.
 - Main-page network/HTTP error screen with remote-focusable Retry.
 - HTTPS only; certificate errors fail closed; no file/content access, arbitrary external
-  intents, downloads, popups, camera/microphone grants, or native JavaScript bridge.
+  intents, downloads, automatic/nested popups, camera/microphone grants, or native JavaScript bridge.
 - No DRM bypass, scraping, downloading, access-control bypass, or video re-hosting.
 
 The website and its providers control availability, login, codec and WebView compatibility.
 Passing automated tests does not guarantee playback from every third-party media host.
 If a provider refuses WebView or requires unsupported DRM, the app does not bypass it.
+
+## Sign-in windows (1.0.1)
+
+User-initiated popup windows now keep their opener alive and support D-pad, OK,
+pointer mode and Back to close. A native header shows the popup host. Automatic
+and nested popups remain blocked.
+
+**This does not enable Google account login inside the APK.** Google account
+navigation is intercepted before loading and explains the restriction, with an
+optional external-browser action that opens KissKH from the beginning. The browser
+has its own session: it does not log the APK in. The known Firebase popup-closed
+alert is acknowledged only after this explanation; other website alerts remain.
+No user-agent spoofing, cookie transfer or authentication bypass is used.
 
 ## Build and test
 
