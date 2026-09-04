@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">KissKH TV</string>
+    <string name="loading">Loading…</string>
+    <string name="network_error">Unable to load KissKH. Check the network and try again.</string>
+    <string name="retry">Retry</string>
+    <string name="remote_help">D-pad to browse, OK to select. Hold OK to toggle the pointer for player controls.</string>
+    <string name="pointer_on">Pointer on: D-pad moves, OK clicks. Hold OK to switch back.</string>
+    <string name="pointer_off">D-pad focus mode</string>
+    <string name="downloads_disabled">Downloads are not supported in KissKH TV.</string>
+</resources>

@@ -1,0 +1,77 @@
+name: Android TV APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install compile SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Validate, unit test, lint and build APK
+        run: |
+          bash scripts/validate-project.sh
+          ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - name: Enable Android emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test on Android TV emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: android-tv
+          arch: x86
+          profile: tv_1080p
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
+      - name: Package verified APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/kisskh-tv.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/kisskh-tv.apk
+          sha256sum dist/kisskh-tv.apk > dist/kisskh-tv.apk.sha256
+      - name: Upload APK
+        id: apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: kisskh-tv-apk
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90
+      - name: APK download link
+        run: |
+          echo '### KissKH TV APK' >> "$GITHUB_STEP_SUMMARY"
+          echo '[Download APK artifact](${{ steps.apk.outputs.artifact-url }}) — unzip and install kisskh-tv.apk.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-reports
+          path: |
+            app/build/reports/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: warn
+          retention-days: 30
