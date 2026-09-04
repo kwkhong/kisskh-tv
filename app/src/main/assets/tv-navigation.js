@@ -1,6 +1,11 @@
-(function() {
+(function installNavigation() {
   if (window.__kissKhTvInstalled) return;
-  window.__kissKhTvInstalled = true;
+  // A finishing callback from a replaced page can arrive while the new document
+  // is still being parsed. Do not mark navigation installed until setup succeeds.
+  if (!document.head || !document.body || document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNavigation, {once: true});
+    return;
+  }
 
   var STYLE_ID = '__kisskh_tv_focus_style';
   if (!document.getElementById(STYLE_ID)) {
@@ -86,4 +91,5 @@
     return {x: (rect.left + rect.width / 2) / window.innerWidth,
             y: (rect.top + rect.height / 2) / window.innerHeight};
   };
+  window.__kissKhTvInstalled = true;
 })();
