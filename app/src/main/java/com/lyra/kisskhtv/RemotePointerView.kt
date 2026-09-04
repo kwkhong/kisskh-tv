@@ -8,7 +8,7 @@ import android.view.View
 
 /** Remote-operated touch pointer: works with normal embedded players without inspecting their content. */
 class RemotePointerView(context: Context) : View(context) {
-    var enabled = false
+    var pointerActive = false
         set(value) { field = value; visibility = if (value) VISIBLE else GONE; invalidate() }
     var cursorX = 0f
         private set

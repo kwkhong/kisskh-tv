@@ -85,9 +85,11 @@ class TvAppTest {
         }
     }
 
-    @Test fun longOkEnablesPointerAndBackDisablesIt() {
+    @Test fun pointerClicksAnIsolatedFrameAndBackDisablesIt() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            fixture(scenario, "<button onclick='window.clicked=true'>Click</button>")
+            fixture(scenario, """<style>html,body{margin:0;width:100%;height:100%}iframe{border:0;width:100vw;height:100vh}</style>
+                <script>window.frameClicks=0;window.addEventListener('message',function(e){if(e.data==='clicked')window.frameClicks++})</script>
+                <iframe sandbox="allow-scripts" srcdoc="<button style='position:fixed;inset:0;width:100%;height:100%' onclick=&quot;parent.postMessage('clicked','*')&quot;>Frame control</button>"></iframe>""")
             scenario.onActivity {
                 val t = SystemClock.uptimeMillis()
                 it.dispatchKeyEvent(KeyEvent(t, t, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER, 0))
@@ -95,11 +97,24 @@ class TvAppTest {
                 it.dispatchKeyEvent(KeyEvent(t, t + 720, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER, 0))
                 val root = it.findViewById<android.widget.FrameLayout>(R.id.root)
                 val pointer = root.getChildAt(root.childCount - 1) as RemotePointerView
-                assertTrue(pointer.enabled)
-                it.onBackPressedDispatcher.onBackPressed()
-                assertFalse(pointer.enabled)
+                assertTrue(pointer.pointerActive)
             }
-            assertEquals("null", js(scenario, "window.clicked"))
+            assertEquals("0", js(scenario, "window.frameClicks"))
+            waitFor("Pointer layout") {
+                var ready = false
+                scenario.onActivity {
+                    val root = it.findViewById<android.widget.FrameLayout>(R.id.root)
+                    ready = root.getChildAt(root.childCount - 1).width > 0
+                }
+                ready
+            }
+            key(KeyEvent.KEYCODE_DPAD_CENTER)
+            waitFor("Native pointer must click the isolated frame") { js(scenario, "window.frameClicks") == "1" }
+            key(KeyEvent.KEYCODE_BACK)
+            scenario.onActivity {
+                val root = it.findViewById<android.widget.FrameLayout>(R.id.root)
+                assertFalse((root.getChildAt(root.childCount - 1) as RemotePointerView).pointerActive)
+            }
         }
     }
 

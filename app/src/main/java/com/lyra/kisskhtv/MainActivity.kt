@@ -58,7 +58,7 @@ class MainActivity : AppCompatActivity() {
             override fun handleOnBackPressed() {
                 when {
                     fullscreenView != null -> exitFullscreen()
-                    pointer.enabled -> pointer.enabled = false
+                    pointer.pointerActive -> pointer.pointerActive = false
                     webView.canGoBack() -> webView.goBack()
                     else -> finish()
                 }
@@ -178,16 +178,16 @@ class MainActivity : AppCompatActivity() {
             if (event.action == KeyEvent.ACTION_DOWN) {
                 if (event.repeatCount == 0) { centerDown = true; longPressHandled = false }
                 if (centerDown && !longPressHandled && event.eventTime - event.downTime >= 600) {
-                    pointer.enabled = !pointer.enabled
+                    pointer.pointerActive = !pointer.pointerActive
                     longPressHandled = true
-                    Toast.makeText(this, if (pointer.enabled) R.string.pointer_on else R.string.pointer_off,
+                    Toast.makeText(this, if (pointer.pointerActive) R.string.pointer_on else R.string.pointer_off,
                         Toast.LENGTH_SHORT).show()
                 }
             } else if (event.action == KeyEvent.ACTION_UP && centerDown) {
                 centerDown = false
                 if (!longPressHandled && !event.isCanceled) {
                     when {
-                        pointer.enabled -> clickPointer()
+                        pointer.pointerActive -> clickPointer()
                         fullscreenView != null -> {
                             fullscreenView?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))
                             fullscreenView?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
@@ -213,9 +213,9 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
             else -> null
         }
-        if (direction != null && (pointer.enabled || fullscreenView == null)) {
+        if (direction != null && (pointer.pointerActive || fullscreenView == null)) {
             if (event.action == KeyEvent.ACTION_DOWN) {
-                if (pointer.enabled) {
+                if (pointer.pointerActive) {
                     val delta = (if (event.repeatCount > 5) 28 else 14) * resources.displayMetrics.density
                     pointer.move(direction, delta)
                 } else webView.evaluateJavascript("window.__kissKhTvMove && window.__kissKhTvMove('$direction')", null)
