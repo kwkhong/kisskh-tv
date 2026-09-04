@@ -315,7 +315,7 @@ class MainActivity : AppCompatActivity() {
                             fullscreenView?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))
                             fullscreenView?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
                         }
-                        else -> webView.evaluateJavascript("window.__kissKhTvActivate && window.__kissKhTvActivate()") { result ->
+                        else -> webView.evaluateJavascript(navigationScript + "\nwindow.__kissKhTvActivate && window.__kissKhTvActivate()") { result ->
                             if (result != null && result != "null" && !isDestroyed) {
                                 try {
                                     val point = JSONObject(result)
@@ -341,7 +341,7 @@ class MainActivity : AppCompatActivity() {
                 if (pointer.pointerActive) {
                     val delta = (if (event.repeatCount > 5) 28 else 14) * resources.displayMetrics.density
                     pointer.move(direction, delta)
-                } else webView.evaluateJavascript("window.__kissKhTvMove && window.__kissKhTvMove('$direction')", null)
+                } else webView.evaluateJavascript(navigationScript + "\nwindow.__kissKhTvMove && window.__kissKhTvMove('$direction')", null)
             }
             return true
         }

@@ -76,8 +76,10 @@ class TvAppTest {
             js(scenario, "document.getElementById('open').focus()")
             key(KeyEvent.KEYCODE_DPAD_CENTER)
             waitFor("Popup must preserve its opener") { js(scenario, "!!window.child && !child.closed && child.opener === window") == "true" }
-            waitFor("Popup navigation") { js(scenario, "!!child.__kissKhTvMove") == "true" }
             key(KeyEvent.KEYCODE_DPAD_DOWN)
+            waitFor("Popup navigation must also initialize in dynamically written windows") {
+                js(scenario, "!!child.__kissKhTvMove && child.document.activeElement.tagName === 'BUTTON'") == "true"
+            }
             key(KeyEvent.KEYCODE_DPAD_CENTER)
             waitFor("Remote OK must activate popup control") { js(scenario, "window.popupClicks") == "1" }
             key(KeyEvent.KEYCODE_BACK)
